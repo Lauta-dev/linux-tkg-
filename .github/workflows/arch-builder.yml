@@ -6,71 +6,11 @@ on:
       - main
       - master
       - uso-de-modprobedb
-    # Solo trigerea cuando se modifican archivos relevantes al build
-    paths:
-      - "customization.cfg"
-      - "essential.myfrag"
-      - "modprobed.db"
-      - ".github/workflows/arch-builder.yml"
-      - "linux-tkg-config/**"
-      - "linux-tkg-patches/**"
-
-  workflow_dispatch:
-    inputs:
-      _cpusched:
-        description: "CPU scheduler (bmq, pds, bore, eevdf)"
-        required: true
-        default: "pds"
-
-  workflow_call:
-    inputs:
-      _cpusched:
-        required: true
-        type: string
 
 # ─────────────────────────────────────────────
 # Build environment variables passed to linux-tkg
 # These override values in customization.cfg
 # ─────────────────────────────────────────────
-env:
-  # Target CPU micro-architecture optimization
-  # See: https://github.com/graysky2/kernel_compiler_patch
-  _processor_opt: "silvermont"
-
-  # Use clang/LLVM as compiler
-  _compiler: "llvm"
-
-  # Clang LTO mode: "no", "thin" or "full"
-  # thin = faster build, multiple threads
-  # full = slower, potentially better runtime perf
-  _lto_mode: "thin"
-
-  # Disable ccache in CI — no benefit without persistent cache
-  # (we handle caching separately via actions/cache below)
-  _noccache: "true"
-
-  # Git mirror to fetch kernel sources from
-  _git_mirror: "gregkh"
-
-  # Output directory for built packages
-  PKGDEST: "/tmp/linux-tkg"
-
-  # Aggressively disable debug symbols and kernel debugging features
-  _debugdisable: "true"
-
-  # Strip kernel and modules from debug symbols
-  _STRIP: "true"
-
-  # Use /tmp for kernel work and source folders (faster I/O in CI)
-  _kernel_work_folder: "/tmp"
-  _kernel_source_folder: "/tmp"
-
-  # Don't generate a fallback initramfs
-  _nofallback: "true"
-
-  # Path to modprobed.db — used if _modprobeddb is enabled in customization.cfg
-  _modprobeddb_db_path: ${{ github.workspace }}/modprobed.db
-
 jobs:
   build-kernel:
     runs-on: ubuntu-latest
