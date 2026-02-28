@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+      - uso-de-modprobedb
     # Solo trigerea cuando se modifican archivos relevantes al build
     paths:
       - "customization.cfg"
