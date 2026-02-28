@@ -140,3 +140,8 @@ wmi
 wmi_bmof
 xfs
 zram
+i8042
+serio
+atkbd
+libps2
+psmouse
