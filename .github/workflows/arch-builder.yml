@@ -22,7 +22,7 @@ on:
 
 env:
   _processor_opt: "silvermont"
-  _compiler: "gcc"
+  #_compiler: ""
   _lto_mode: "thin"
   _noccache: "false"
   _git_mirror: "gregkh"
