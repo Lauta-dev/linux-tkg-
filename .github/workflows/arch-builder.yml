@@ -5,11 +5,12 @@ on:
     branches:
       - main
       - master
+      - my-yaml
 
   workflow_dispatch:
     inputs:
       _cpusched:
-        description: "CPU scheduler (bmq, pds, cfs)"
+        description: "CPU scheduler (bmq, pds, bore, eevdf)"
         required: true
         default: "pds"
 
@@ -19,77 +20,197 @@ on:
         required: true
         type: string
 
-
+# ─────────────────────────────────────────────
+# Build environment variables passed to linux-tkg
+# These override values in customization.cfg
+# ─────────────────────────────────────────────
 env:
+  # Target CPU micro-architecture optimization
+  # See: https://github.com/graysky2/kernel_compiler_patch
   _processor_opt: "silvermont"
-  #_compiler: ""
+
+  # Use clang/LLVM as compiler
+  _compiler: "llvm"
+
+  # Clang LTO mode: "no", "thin" or "full"
+  # thin = faster build, multiple threads
+  # full = slower, potentially better runtime perf
   _lto_mode: "thin"
-  _noccache: "false"
+
+  # Disable ccache in CI — no benefit without persistent cache
+  # (we handle caching separately via actions/cache below)
+  _noccache: "true"
+
+  # Git mirror to fetch kernel sources from
   _git_mirror: "gregkh"
 
+  # Output directory for built packages
   PKGDEST: "/tmp/linux-tkg"
+
+  # Aggressively disable debug symbols and kernel debugging features
   _debugdisable: "true"
+
+  # Strip kernel and modules from debug symbols
   _STRIP: "true"
+
+  # Build only a subset of modules to speed up compilation
+  # WARNING: may cause missing modules on some hardware
   _kernel_on_diet: "true"
+
+  # Use /tmp for kernel work and source folders (faster I/O in CI)
   _kernel_work_folder: "/tmp"
   _kernel_source_folder: "/tmp"
-  # _modprobeddb: "true"
-  _modprobeddb_db_path: ${{ github.workspace }}/modprobed.db
+
+  # Don't generate a fallback initramfs
   _nofallback: "true"
-  _disable_bpf: "true"
-  _disable_btf: "true"
 
-
+  # Path to modprobed.db — used if _modprobeddb is enabled in customization.cfg
+  _modprobeddb_db_path: ${{ github.workspace }}/modprobed.db
 
 jobs:
   build-kernel:
-    env:
-      _cpusched: ${{ inputs._cpusched }}
-
     runs-on: ubuntu-latest
     container: archlinux:latest
 
-    steps:
-      # We need to install git so the checkout is done with it
-      #- name: Update mirrorlist
-      #  run: |
-      #    pacman -Sy --noconfirm reflector
-      #    reflector --latest 50 --protocol http,https --sort rate --save /etc/pacman.d/mirrorlist
+    env:
+      # CPU scheduler — comes from workflow input or defaults to empty (prompts)
+      _cpusched: ${{ inputs._cpusched }}
 
-      - name: Install git
+    steps:
+      # ── Step 1 ──────────────────────────────────────────────────────────────
+      # Install git first so actions/checkout uses it instead of the JS fallback
+      # ────────────────────────────────────────────────────────────────────────
+      - name: "1 · Install git"
         run: pacman -Syu --noconfirm git
 
-      - name: Checkout linux-tkg
+      # ── Step 2 ──────────────────────────────────────────────────────────────
+      # Checkout the linux-tkg repository (PKGBUILD + patches + config)
+      # ────────────────────────────────────────────────────────────────────────
+      - name: "2 · Checkout linux-tkg"
         uses: actions/checkout@v4
 
-      # 1. Install deps needed for building and sudo
-      # 2. create a user "user" and give it passwordless sudo
-      #    and necessary permissions
-      #    because makepkg absolutely refuses to run as root
-      - name: Prepare for makepkg
+      # ── Step 3 ──────────────────────────────────────────────────────────────
+      # Install all build dependencies.
+      # Also creates a non-root user because makepkg refuses to run as root.
+      # ────────────────────────────────────────────────────────────────────────
+      - name: "3 · Install build dependencies and prepare non-root user"
         run: |
-          pacman -Syu --noconfirm base-devel gcc binutils libelf elfutils pahole sudo
-          useradd user -G wheel && echo "user ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+          pacman -Syu --noconfirm \
+            base-devel gcc binutils libelf elfutils pahole sudo ccache
+
+          # Create unprivileged user with passwordless sudo
+          useradd user -G wheel
+          echo "user ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+          # Give the new user ownership of the workspace and /tmp
           chown user -R ..
           chown user -R /tmp
 
-      # - name: "[debug] make dummy modprobed-db file for faster ci"
-      #   run: |
-      #     touch "${_modprobeddb_db_path}"
-      #     echo "${_modprobeddb_db_path}"
+      # ── Step 4 ──────────────────────────────────────────────────────────────
+      # Restore ccache from cache to speed up repeat builds.
+      # Cache key includes the scheduler so different schedulers don't share cache.
+      # ────────────────────────────────────────────────────────────────────────
+      - name: "4 · Restore ccache"
+        uses: actions/cache@v4
+        with:
+          path: /home/user/.ccache
+          key: ccache-arch-${{ env._cpusched }}-${{ github.sha }}
+          restore-keys: |
+            ccache-arch-${{ env._cpusched }}-
+            ccache-arch-
 
-      - name: Compile Kernel
-        run: su --preserve-environment user -c "yes '' | makepkg --noconfirm -s"
-        # run: |
-        #   mkdir -p "$PKGDEST"
-        #   echo "test" > "$PKGDEST"/linux-$_cpusched.pkg.tar.zst
+      # ── Step 5 ──────────────────────────────────────────────────────────────
+      # Set correct ownership on the restored ccache directory
+      # (actions/cache restores as root inside the container)
+      # ────────────────────────────────────────────────────────────────────────
+      - name: "5 · Fix ccache ownership"
+        run: |
+          mkdir -p /home/user/.ccache
+          chown -R user /home/user/.ccache
 
-      - name: rename kernel config
+      # ── Step 6 ──────────────────────────────────────────────────────────────
+      # Main build step — runs makepkg as the non-root user.
+      # linux-tkg reads env vars + customization.cfg to configure the build.
+      # "yes ''" auto-answers any interactive prompts with the default value.
+      # ────────────────────────────────────────────────────────────────────────
+      - name: "6 · Compile kernel"
+        run: |
+          su --preserve-environment user -c "yes '' | makepkg --noconfirm -s"
+
+      # ── Step 7 ──────────────────────────────────────────────────────────────
+      # Rename the generated kernel config to include scheduler name,
+      # making it easy to identify which config belongs to which build.
+      # ────────────────────────────────────────────────────────────────────────
+      - name: "7 · Rename kernel config"
         run: mv kernelconfig.new kernelconfig.arch.${{ env._cpusched }}.txt
 
-      - uses: actions/upload-artifact@v4
+      # ── Step 8 ──────────────────────────────────────────────────────────────
+      # Extract the kernel version from the built package name.
+      # This is used for the release tag and release notes.
+      # Example package name: linux612-tkg-pds-6.12.5-1-x86_64.pkg.tar.zst
+      # ────────────────────────────────────────────────────────────────────────
+      - name: "8 · Get kernel version"
+        id: kver
+        run: |
+          PKG=$(ls ${{ env.PKGDEST }}/linux*.pkg.tar.zst | grep -v headers | grep -v docs | head -n1)
+          VERSION=$(echo "$PKG" | grep -oP '\d+\.\d+\.\d+' | head -n1)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Kernel version detected: $VERSION"
+
+      # ── Step 9 ──────────────────────────────────────────────────────────────
+      # Upload build artifacts (packages + config) for download from the
+      # Actions run page, independent of releases.
+      # ────────────────────────────────────────────────────────────────────────
+      - name: "9 · Upload artifacts"
+        uses: actions/upload-artifact@v4
         with:
           name: arch-kernel-packages-${{ env._cpusched }}
           path: |
             ${{ env.PKGDEST }}/linux*.pkg.tar.zst
             kernelconfig*.txt
+
+      # ── Step 10 ─────────────────────────────────────────────────────────────
+      # Create a GitHub Release with the built packages attached.
+      # The release tag includes the kernel version and scheduler.
+      # Release notes describe the target hardware and build configuration.
+      # Only runs on push to main/master, not on workflow_call from other workflows.
+      # ────────────────────────────────────────────────────────────────────────
+      - name: "10 · Create GitHub Release"
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.kver.outputs.version }}"
+          SCHED="${{ env._cpusched }}"
+          TAG="v${VERSION}-${SCHED}"
+          FILES=$(find ${{ env.PKGDEST }} -name "linux*.pkg.tar.zst" | tr '\n' ' ')
+
+          gh release create "$TAG" $FILES kernelconfig.arch.${SCHED}.txt \
+            --title "Linux ${VERSION} · ${SCHED} · silvermont (Arch)" \
+            --notes "## linux-tkg ${VERSION} — \`${SCHED}\` scheduler
+
+          ### Target hardware
+          | Property | Value |
+          |---|---|
+          | Architecture | x86_64 |
+          | CPU micro-arch | \`silvermont\` (Intel Atom / Bay Trail / Braswell) |
+          | Compiler | LLVM/Clang with ThinLTO |
+          | Distribution | Arch Linux |
+
+          ### Build configuration
+          | Option | Value |
+          |---|---|
+          | CPU scheduler | \`${SCHED}\` |
+          | LTO mode | thin |
+          | Debug symbols | disabled |
+          | Kernel on diet | enabled |
+          | ccache | disabled in CI |
+
+          ### Installation
+          \`\`\`bash
+          sudo pacman -U linux*${SCHED}*.pkg.tar.zst linux*${SCHED}*-headers*.pkg.tar.zst
+          \`\`\`
+
+          > Built automatically by GitHub Actions from [linux-tkg](https://github.com/Frogging-Family/linux-tkg)." \
+            --latest \
+            || echo "Release $TAG already exists, skipping."
