@@ -6,28 +6,7 @@ on:
       - main
       - master
       - uso-de-modprobedb
-    # Solo trigerea cuando se modifican archivos relevantes al build
-    paths:
-      - "customization.cfg"
-      - "essential.myfrag"
-      - "modprobed.db"
-      - ".github/workflows/arch-builder.yml"
-      - "linux-tkg-config/**"
-      - "linux-tkg-patches/**"
-
-  workflow_dispatch:
-    inputs:
-      _cpusched:
-        description: "CPU scheduler (bmq, pds, bore, eevdf)"
-        required: true
-        default: "pds"
-
-  workflow_call:
-    inputs:
-      _cpusched:
-        required: true
-        type: string
-
+    
 # ─────────────────────────────────────────────
 # Build environment variables passed to linux-tkg
 # These override values in customization.cfg
@@ -52,10 +31,6 @@ jobs:
   build-kernel:
     runs-on: ubuntu-latest
     container: archlinux:latest
-
-    env:
-      # CPU scheduler — comes from workflow input or defaults to empty (prompts)
-      _cpusched: ${{ inputs._cpusched }}
 
     steps:
       # ── Step 1 ──────────────────────────────────────────────────────────────
