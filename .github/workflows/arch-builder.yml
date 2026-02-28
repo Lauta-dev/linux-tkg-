@@ -24,13 +24,20 @@ env:
   _kernel_source_folder: "/tmp"
   _nofallback: "true"
   _modprobeddb_db_path: ${{ github.workspace }}/modprobed.db
-  _cpusched: "bore"
 
 
 jobs:
   build-kernel:
     runs-on: ubuntu-latest
     container: archlinux:latest
+
+    strategy:
+      matrix:
+        cpusched: [bore, pds]
+      fail-fast: false  # si uno falla, el otro sigue
+    
+    env:
+      _cpusched: ${{ matrix.cpusched }}
 
     steps:
       # ── Step 1 ──────────────────────────────────────────────────────────────
