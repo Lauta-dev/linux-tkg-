@@ -31,6 +31,8 @@ env:
   # _modprobeddb: "true"
   _modprobeddb_db_path: ${{ github.workspace }}/modprobed.db
   _nofallback: "true"
+  _disable_bpf: "true"
+  _disable_btf: "true"
 
 
 
