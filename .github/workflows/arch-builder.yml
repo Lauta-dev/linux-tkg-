@@ -8,14 +8,15 @@ on:
 
 
 env:
-  _processor_opt: "x86-64"
+  _processor_opt: "silvermont"
+  _compiler: "gcc"
+  _lto_mode: "thin"
+  _noccache: "false"
   _git_mirror: "gregkh"
+
   PKGDEST: "/tmp/linux-tkg"
   _debugdisable: "true"
-  _noccache: "true"
   _STRIP: "true"
-  _compiler: "llvm"
-  _lto_mode: "full"
   _kernel_on_diet: "true"
   _kernel_work_folder: "/tmp"
   _kernel_source_folder: "/tmp"
