@@ -5,7 +5,14 @@ on:
     branches:
       - main
       - master
-      - uso-de-modprobedb
+    # Solo trigerea cuando se modifican archivos relevantes al build
+    paths:
+      - "customization.cfg"
+      - "essential.myfrag"
+      - "modprobed.db"
+      - ".github/workflows/arch-builder.yml"
+      - "linux-tkg-config/**"
+      - "linux-tkg-patches/**"
 
   workflow_dispatch:
     inputs:
@@ -141,17 +148,27 @@ jobs:
         run: mv kernelconfig.new kernelconfig.arch.${{ env._cpusched }}.txt
 
       # ── Step 8 ──────────────────────────────────────────────────────────────
-      # Extract the kernel version from the built package name.
-      # This is used for the release tag and release notes.
-      # Example package name: linux612-tkg-pds-6.12.5-1-x86_64.pkg.tar.zst
+      # Extract kernel version AND scheduler from the built package name.
+      # Extracting scheduler from the package avoids issues when _cpusched
+      # is empty (e.g. on push triggers without workflow_dispatch input).
+      # Example package: linux612-tkg-pds-llvm-6.12.74-273-x86_64.pkg.tar.zst
       # ────────────────────────────────────────────────────────────────────────
-      - name: "8 · Get kernel version"
+      - name: "8 · Get kernel version and scheduler"
         id: kver
         run: |
-          PKG=$(ls ${{ env.PKGDEST }}/linux*.pkg.tar.zst | grep -v headers | grep -v docs | head -n1)
-          VERSION=$(echo "$PKG" | grep -oP '\d+\.\d+\.\d+' | head -n1)
+          PKG=$(find ${{ env.PKGDEST }} -name "linux*.pkg.tar.zst" \
+            ! -name "*headers*" ! -name "*docs*" | head -n1)
+          echo "Package found: $PKG"
+
+          # Extract version (e.g. 6.12.74)
+          VERSION=$(basename "$PKG" | grep -oP '\d+\.\d+\.\d+' | head -n1)
+
+          # Extract scheduler from package name (e.g. pds, eevdf, bore)
+          SCHED=$(basename "$PKG" | grep -oP '(?<=tkg-)[a-z]+(?=-llvm|-\d|-)' | head -n1)
+
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Kernel version detected: $VERSION"
+          echo "sched=$SCHED" >> $GITHUB_OUTPUT
+          echo "Kernel: $VERSION | Scheduler: $SCHED"
 
       # ── Step 9 ──────────────────────────────────────────────────────────────
       # Upload build artifacts (packages + config) for download from the
@@ -160,53 +177,49 @@ jobs:
       - name: "9 · Upload artifacts"
         uses: actions/upload-artifact@v4
         with:
-          name: arch-kernel-packages-${{ env._cpusched }}
+          name: arch-kernel-packages-${{ steps.kver.outputs.sched }}
           path: |
             ${{ env.PKGDEST }}/linux*.pkg.tar.zst
             kernelconfig*.txt
 
       # ── Step 10 ─────────────────────────────────────────────────────────────
-      # Create a GitHub Release with the built packages attached.
-      # The release tag includes the kernel version and scheduler.
-      # Release notes describe the target hardware and build configuration.
-      # Only runs on push to main/master, not on workflow_call from other workflows.
+      # Create a GitHub Release using softprops/action-gh-release.
+      # Does NOT require gh CLI installed inside the container.
+      # Runs outside the Arch container in the Ubuntu runner environment.
       # ────────────────────────────────────────────────────────────────────────
       - name: "10 · Create GitHub Release"
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          VERSION="${{ steps.kver.outputs.version }}"
-          SCHED="${{ env._cpusched }}"
-          TAG="v${VERSION}-${SCHED}"
-          FILES=$(find ${{ env.PKGDEST }} -name "linux*.pkg.tar.zst" | tr '\n' ' ')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ steps.kver.outputs.version }}-${{ steps.kver.outputs.sched }}"
+          name: "Linux ${{ steps.kver.outputs.version }} · ${{ steps.kver.outputs.sched }} · silvermont (Arch)"
+          body: |
+            ## linux-tkg ${{ steps.kver.outputs.version }} — `${{ steps.kver.outputs.sched }}` scheduler
 
-          gh release create "$TAG" $FILES kernelconfig.arch.${SCHED}.txt \
-            --title "Linux ${VERSION} · ${SCHED} · silvermont (Arch)" \
-            --notes "## linux-tkg ${VERSION} — \`${SCHED}\` scheduler
+            ### Target hardware
+            | Property | Value |
+            |---|---|
+            | Architecture | x86_64 |
+            | CPU | Intel Celeron N2807 (Bay Trail / Silvermont) |
+            | Compiler | LLVM/Clang with ThinLTO |
+            | Distribution | Arch Linux |
 
-          ### Target hardware
-          | Property | Value |
-          |---|---|
-          | Architecture | x86_64 |
-          | CPU micro-arch | \`silvermont\` (Intel Atom / Bay Trail / Braswell) |
-          | Compiler | LLVM/Clang with ThinLTO |
-          | Distribution | Arch Linux |
+            ### Build configuration
+            | Option | Value |
+            |---|---|
+            | CPU scheduler | `${{ steps.kver.outputs.sched }}` |
+            | LTO mode | thin |
+            | Debug symbols | disabled |
+            | modprobed-db | enabled |
 
-          ### Build configuration
-          | Option | Value |
-          |---|---|
-          | CPU scheduler | \`${SCHED}\` |
-          | LTO mode | thin |
-          | Debug symbols | disabled |
-          | Kernel on diet | enabled |
-          | ccache | disabled in CI |
+            ### Installation
+            ```bash
+            sudo pacman -U linux*${{ steps.kver.outputs.sched }}*.pkg.tar.zst linux*${{ steps.kver.outputs.sched }}*-headers*.pkg.tar.zst
+            ```
 
-          ### Installation
-          \`\`\`bash
-          sudo pacman -U linux*${SCHED}*.pkg.tar.zst linux*${SCHED}*-headers*.pkg.tar.zst
-          \`\`\`
-
-          > Built automatically by GitHub Actions from [linux-tkg](https://github.com/Frogging-Family/linux-tkg)." \
-            --latest \
-            || echo "Release $TAG already exists, skipping."
+            > Built automatically by GitHub Actions from [linux-tkg](https://github.com/Frogging-Family/linux-tkg).
+          files: |
+            ${{ env.PKGDEST }}/linux*.pkg.tar.zst
+            kernelconfig.arch.${{ steps.kver.outputs.sched }}.txt
+          make_latest: true
+          fail_on_unmatched_files: false
