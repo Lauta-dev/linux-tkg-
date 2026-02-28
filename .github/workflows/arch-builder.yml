@@ -5,7 +5,7 @@ on:
     branches:
       - main
       - master
-      - my-yaml
+      - uso-de-modprobedb
 
   workflow_dispatch:
     inputs:
