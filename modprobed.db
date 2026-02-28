@@ -66,6 +66,7 @@ mmc_core
 mousedev
 mtd
 nfnetlink
+nls_utf8
 ntfs3
 pkcs8_key_parser
 platform_profile
@@ -137,4 +138,5 @@ videobuf2_vmalloc
 videodev
 wmi
 wmi_bmof
+xfs
 zram
