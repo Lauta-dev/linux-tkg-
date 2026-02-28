@@ -1,11 +1,10 @@
 name: Build archlinux kernel
 
 on:
-  workflow_call:
-    inputs:
-      _cpusched:
-        required: true
-        type: string
+  push:
+    branches:
+      - main
+      - master
 
   workflow_dispatch:
     inputs:
@@ -13,6 +12,12 @@ on:
         description: "CPU scheduler (bmq, pds, cfs)"
         required: true
         default: "pds"
+
+  workflow_call:
+    inputs:
+      _cpusched:
+        required: true
+        type: string
 
 
 env:
@@ -63,7 +68,7 @@ jobs:
       #    because makepkg absolutely refuses to run as root
       - name: Prepare for makepkg
         run: |
-          pacman -Syu --noconfirm base-devel sudo
+          pacman -Syu --noconfirm base-devel gcc binutils libelf elfutils pahole sudo
           useradd user -G wheel && echo "user ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           chown user -R ..
           chown user -R /tmp
