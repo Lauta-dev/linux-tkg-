@@ -53,10 +53,6 @@ env:
   # Strip kernel and modules from debug symbols
   _STRIP: "true"
 
-  # Build only a subset of modules to speed up compilation
-  # WARNING: may cause missing modules on some hardware
-  _kernel_on_diet: "true"
-
   # Use /tmp for kernel work and source folders (faster I/O in CI)
   _kernel_work_folder: "/tmp"
   _kernel_source_folder: "/tmp"
