@@ -6,7 +6,7 @@ on:
       - main
       - master
       - uso-de-modprobedb
-    
+
 # ─────────────────────────────────────────────
 # Build environment variables passed to linux-tkg
 # These override values in customization.cfg
@@ -15,7 +15,7 @@ env:
   _processor_opt: "silvermont"
   _compiler: "gcc"
   _lto_mode: "none"
-  _noccache: "true"
+  _noccache: "false"          # ccache habilitado
   _git_mirror: "gregkh"
   PKGDEST: "/tmp/linux-tkg"
   _debugdisable: "true"
@@ -23,6 +23,7 @@ env:
   _kernel_work_folder: "/tmp"
   _kernel_source_folder: "/tmp"
   _nofallback: "true"
+  _localmodcfg: "true"        # compilar solo modulos del modprobed.db
   _modprobeddb_db_path: ${{ github.workspace }}/modprobed.db
 
 
@@ -31,90 +32,58 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
 
-    # strategy:
-    #   matrix:
-    #     cpusched: [bore, pds]
-    #   fail-fast: false  # si uno falla, el otro sigue
-    #
-
     env:
       _cpusched: pds
-      # _cpusched: ${{ matrix.cpusched }}
 
     steps:
       # ── Step 1 ──────────────────────────────────────────────────────────────
-      # Install git first so actions/checkout uses it instead of the JS fallback
-      # ────────────────────────────────────────────────────────────────────────
       - name: "1 · Install git"
         run: pacman -Syu --noconfirm git
 
       # ── Step 2 ──────────────────────────────────────────────────────────────
-      # Checkout the linux-tkg repository (PKGBUILD + patches + config)
-      # ────────────────────────────────────────────────────────────────────────
       - name: "2 · Checkout linux-tkg"
         uses: actions/checkout@v4
 
       # ── Step 3 ──────────────────────────────────────────────────────────────
-      # Install all build dependencies.
-      # Also creates a non-root user because makepkg refuses to run as root.
-      # ────────────────────────────────────────────────────────────────────────
       - name: "3 · Install build dependencies and prepare non-root user"
         run: |
           pacman -Syu --noconfirm \
             base-devel gcc binutils libelf elfutils pahole sudo ccache
 
-          # Create unprivileged user with passwordless sudo
           useradd user -G wheel
           echo "user ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-          # Give the new user ownership of the workspace and /tmp
           chown user -R ..
           chown user -R /tmp
 
       # ── Step 4 ──────────────────────────────────────────────────────────────
-      # Restore ccache from cache to speed up repeat builds.
-      # Cache key includes the scheduler so different schedulers don't share cache.
+      # Cache key usa ref en lugar de sha para reutilizar entre commits
       # ────────────────────────────────────────────────────────────────────────
       - name: "4 · Restore ccache"
         uses: actions/cache@v4
         with:
           path: /home/user/.ccache
-          key: ccache-arch-${{ env._cpusched }}-${{ github.sha }}
+          key: ccache-arch-${{ env._cpusched }}-${{ github.ref }}
           restore-keys: |
             ccache-arch-${{ env._cpusched }}-
             ccache-arch-
 
       # ── Step 5 ──────────────────────────────────────────────────────────────
-      # Set correct ownership on the restored ccache directory
-      # (actions/cache restores as root inside the container)
-      # ────────────────────────────────────────────────────────────────────────
       - name: "5 · Fix ccache ownership"
         run: |
           mkdir -p /home/user/.ccache
           chown -R user /home/user/.ccache
 
       # ── Step 6 ──────────────────────────────────────────────────────────────
-      # Main build step — runs makepkg as the non-root user.
-      # linux-tkg reads env vars + customization.cfg to configure the build.
-      # "yes ''" auto-answers any interactive prompts with the default value.
-      # ────────────────────────────────────────────────────────────────────────
       - name: "6 · Compile kernel"
         run: |
           su --preserve-environment user -c "yes '' | makepkg --noconfirm -s"
 
       # ── Step 7 ──────────────────────────────────────────────────────────────
-      # Rename the generated kernel config to include scheduler name,
-      # making it easy to identify which config belongs to which build.
-      # ────────────────────────────────────────────────────────────────────────
       - name: "7 · Rename kernel config"
         run: mv kernelconfig.new kernelconfig.arch.${{ env._cpusched }}.txt
 
       # ── Step 8 ──────────────────────────────────────────────────────────────
-      # Extract kernel version AND scheduler from the built package name.
-      # Extracting scheduler from the package avoids issues when _cpusched
-      # is empty (e.g. on push triggers without workflow_dispatch input).
-      # Example package: linux612-tkg-pds-llvm-6.12.74-273-x86_64.pkg.tar.zst
-      # ────────────────────────────────────────────────────────────────────────
       - name: "8 · Get kernel version and scheduler"
         id: kver
         run: |
@@ -122,10 +91,7 @@ jobs:
             ! -name "*headers*" ! -name "*docs*" | head -n1)
           echo "Package found: $PKG"
 
-          # Extract version (e.g. 6.12.74)
           VERSION=$(basename "$PKG" | grep -oP '\d+\.\d+\.\d+' | head -n1)
-
-          # Extract scheduler from package name (e.g. pds, eevdf, bore)
           SCHED=$(basename "$PKG" | grep -oP '(?<=tkg-)[a-z]+(?=-llvm|-\d|-)' | head -n1)
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -133,9 +99,6 @@ jobs:
           echo "Kernel: $VERSION | Scheduler: $SCHED"
 
       # ── Step 9 ──────────────────────────────────────────────────────────────
-      # Upload build artifacts (packages + config) for download from the
-      # Actions run page, independent of releases.
-      # ────────────────────────────────────────────────────────────────────────
       - name: "9 · Upload artifacts"
         uses: actions/upload-artifact@v4
         with:
@@ -145,10 +108,6 @@ jobs:
             kernelconfig*.txt
 
       # ── Step 10 ─────────────────────────────────────────────────────────────
-      # Create a GitHub Release using softprops/action-gh-release.
-      # Does NOT require gh CLI installed inside the container.
-      # Runs outside the Arch container in the Ubuntu runner environment.
-      # ────────────────────────────────────────────────────────────────────────
       - name: "10 · Create GitHub Release"
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
@@ -163,23 +122,18 @@ jobs:
             |---|---|
             | Architecture | x86_64 |
             | CPU | Intel Celeron N2807 (Bay Trail / Silvermont) |
-            | Compiler | LLVM/Clang with ThinLTO |
+            | Compiler | GCC |
             | Distribution | Arch Linux |
 
             ### Build configuration
             | Option | Value |
             |---|---|
             | CPU scheduler | `${{ steps.kver.outputs.sched }}` |
-            | LTO mode | thin |
+            | LTO mode | none |
             | Debug symbols | disabled |
             | modprobed-db | enabled |
+            | localmodcfg | enabled |
 
-            ### Installation
-            ```bash
-            sudo pacman -U linux*${{ steps.kver.outputs.sched }}*.pkg.tar.zst linux*${{ steps.kver.outputs.sched }}*-headers*.pkg.tar.zst
-            ```
-
-            > Built automatically by GitHub Actions from [linux-tkg](https://github.com/Frogging-Family/linux-tkg).
           files: |
             ${{ env.PKGDEST }}/linux*.pkg.tar.zst
             kernelconfig.arch.${{ steps.kver.outputs.sched }}.txt
