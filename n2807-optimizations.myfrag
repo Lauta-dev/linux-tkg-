@@ -253,3 +253,23 @@ CONFIG_NR_CPUS=4
 # PROTOCOLOS LEGACY / NICHO
 # -----------------------------------------------
 # CONFIG_HAMRADIO is not set
+
+# -----------------------------------------------
+# PROTOCOLOS / DRIVERS SIN USO CONFIRMADO
+# -----------------------------------------------
+
+# IBM 842 — compresion para PowerPC, sin aceleracion en x86
+# CONFIG_842_COMPRESS is not set
+# CONFIG_842_DECOMPRESS is not set
+
+# Fujitsu-Siemens LIFEBOOK — no es tu hardware
+# CONFIG_ACPI_CMPC is not set
+
+# Emulacion botones mouse Mac — no tenes Mac
+# CONFIG_MAC_EMUMOUSEBTN is not set
+
+# Tests de red del kernel — solo para desarrollo
+# CONFIG_NET_SELFTESTS is not set
+
+# LEDs via ALSA — sin teclado con LED de mute
+# CONFIG_SND_CTL_LED is not set
