@@ -1,0 +1,172 @@
+# =============================================
+# Optimizaciones para Intel Celeron N2807
+# Bay Trail - 2 cores - 4GB RAM - bare metal
+# EndeavourOS / linux-tkg / PDS scheduler
+# =============================================
+# Uso: colocar este archivo en la misma carpeta
+# que el PKGBUILD de linux-tkg con extension .myfrag
+# y asegurarse de tener en customization.cfg:
+#   _config_fragments="true"
+# =============================================
+
+
+# -----------------------------------------------
+# SIN AMD — hardware Intel puro, nada de esto carga
+# -----------------------------------------------
+# CONFIG_CPU_SUP_AMD is not set
+# CONFIG_X86_MCE_AMD is not set
+# CONFIG_AMD_IOMMU is not set
+# CONFIG_AMD_MEM_ENCRYPT is not set
+# CONFIG_AMD_NUMA is not set
+# CONFIG_X86_AMD_PSTATE is not set
+# CONFIG_AMD_NB is not set
+# CONFIG_AMD_WBRF is not set
+# CONFIG_CRYPTO_DEV_CCP is not set
+# CONFIG_PERF_EVENTS_AMD_BRS is not set
+# CONFIG_X86_AMD_PLATFORM_DEVICE is not set
+# CONFIG_KVM_AMD is not set
+# CONFIG_ACPI_CPPC_LIB is not set
+
+
+# -----------------------------------------------
+# SIN XEN — corremos bare metal, no somos guest ni host
+# -----------------------------------------------
+# CONFIG_HYPERVISOR_GUEST is not set
+# CONFIG_PARAVIRT is not set
+# CONFIG_XEN_PV is not set
+# CONFIG_XEN_PVHVM is not set
+# CONFIG_XEN_PVH is not set
+# CONFIG_XEN_DOM0 is not set
+# CONFIG_XEN_BACKEND is not set
+# CONFIG_XEN_BALLOON is not set
+# CONFIG_XEN_SAVE_RESTORE is not set
+
+
+# -----------------------------------------------
+# SIN SURFACE — no es un Microsoft Surface
+# -----------------------------------------------
+# CONFIG_SURFACE_PLATFORMS is not set
+# CONFIG_SURFACE_AGGREGATOR is not set
+# CONFIG_SURFACE_AGGREGATOR_BUS is not set
+# CONFIG_SURFACE_AGGREGATOR_REGISTRY is not set
+# CONFIG_SURFACE_PLATFORM_PROFILE is not set
+
+
+# -----------------------------------------------
+# NUMA y CPU count — 2 cores, arquitectura UMA
+# -----------------------------------------------
+# CONFIG_NUMA is not set
+# CONFIG_AMD_NUMA is not set
+CONFIG_NR_CPUS=4
+
+
+# -----------------------------------------------
+# ETHERNET — solo r8169 (Realtek RTL8111/8168)
+# -----------------------------------------------
+# CONFIG_NET_VENDOR_3COM is not set
+# CONFIG_NET_VENDOR_ADAPTEC is not set
+# CONFIG_NET_VENDOR_AGERE is not set
+# CONFIG_NET_VENDOR_ALACRITECH is not set
+# CONFIG_NET_VENDOR_ALTEON is not set
+# CONFIG_NET_VENDOR_AMAZON is not set
+# CONFIG_NET_VENDOR_AMD is not set
+# CONFIG_NET_VENDOR_AQUANTIA is not set
+# CONFIG_NET_VENDOR_CAVIUM is not set
+# CONFIG_NET_VENDOR_CHELSIO is not set
+# CONFIG_NET_VENDOR_CISCO is not set
+# CONFIG_NET_VENDOR_CORTINA is not set
+# CONFIG_NET_VENDOR_DEC is not set
+# CONFIG_NET_VENDOR_EMULEX is not set
+# CONFIG_NET_VENDOR_ENGLEDER is not set
+# CONFIG_NET_VENDOR_EZCHIP is not set
+# CONFIG_NET_VENDOR_FUNGIBLE is not set
+# CONFIG_NET_VENDOR_GOOGLE is not set
+# CONFIG_NET_VENDOR_HUAWEI is not set
+# CONFIG_NET_VENDOR_I825XX is not set
+# CONFIG_NET_VENDOR_LITEX is not set
+# CONFIG_NET_VENDOR_MARVELL is not set
+# CONFIG_NET_VENDOR_MELLANOX is not set
+# CONFIG_NET_VENDOR_META is not set
+# CONFIG_NET_VENDOR_MICROCHIP is not set
+# CONFIG_NET_VENDOR_MICROSEMI is not set
+# CONFIG_NET_VENDOR_MICROSOFT is not set
+# CONFIG_NET_VENDOR_MYRI is not set
+# CONFIG_NET_VENDOR_NI is not set
+# CONFIG_NET_VENDOR_NATSEMI is not set
+# CONFIG_NET_VENDOR_NETERION is not set
+# CONFIG_NET_VENDOR_NETRONOME is not set
+# CONFIG_NET_VENDOR_8390 is not set
+# CONFIG_NET_VENDOR_NVIDIA is not set
+# CONFIG_NET_VENDOR_OKI is not set
+# CONFIG_NET_VENDOR_PACKET_ENGINES is not set
+# CONFIG_NET_VENDOR_PENSANDO is not set
+# CONFIG_NET_VENDOR_QLOGIC is not set
+# CONFIG_NET_VENDOR_BROCADE is not set
+# CONFIG_NET_VENDOR_QUALCOMM is not set
+# CONFIG_NET_VENDOR_RDC is not set
+# CONFIG_NET_VENDOR_RENESAS is not set
+# CONFIG_NET_VENDOR_ROCKER is not set
+# CONFIG_NET_VENDOR_SAMSUNG is not set
+# CONFIG_NET_VENDOR_SEEQ is not set
+# CONFIG_NET_VENDOR_SILAN is not set
+# CONFIG_NET_VENDOR_SIS is not set
+# CONFIG_NET_VENDOR_SOLARFLARE is not set
+# CONFIG_NET_VENDOR_SMSC is not set
+# CONFIG_NET_VENDOR_SOCIONEXT is not set
+# CONFIG_NET_VENDOR_STMICRO is not set
+# CONFIG_NET_VENDOR_SUN is not set
+# CONFIG_NET_VENDOR_SYNOPSYS is not set
+# CONFIG_NET_VENDOR_TEHUTI is not set
+# CONFIG_NET_VENDOR_TI is not set
+# CONFIG_NET_VENDOR_VERTEXCOM is not set
+# CONFIG_NET_VENDOR_VIA is not set
+# CONFIG_NET_VENDOR_WANGXUN is not set
+# CONFIG_NET_VENDOR_WIZNET is not set
+# CONFIG_NET_VENDOR_XILINX is not set
+# Vendors con algo util que dejamos pero sin drivers extra:
+# NET_VENDOR_INTEL=y  (se mantiene, no tiene drivers =m en tu config)
+# NET_VENDOR_REALTEK=y + R8169=m  (tu NIC, se mantiene)
+# NET_VENDOR_ATHEROS=y + NET_VENDOR_BROADCOM=y (cfg80211/mac80211 los necesita)
+
+
+# -----------------------------------------------
+# WIFI — solo rtl8723be (tu chip), sacar variantes no usadas
+# -----------------------------------------------
+# CONFIG_RTL8723AE is not set
+# CONFIG_RTL8192EE is not set
+# CONFIG_RTL8821AE is not set
+
+
+# -----------------------------------------------
+# DVB / Media tuners externos — usas chip SMS (Siano) por USB
+# los tuners de TV por cable/satélite no aplican
+# -----------------------------------------------
+# CONFIG_MEDIA_TUNER_MC44S803 is not set
+# CONFIG_MEDIA_TUNER_MT20XX is not set
+# CONFIG_MEDIA_TUNER_SIMPLE is not set
+# CONFIG_MEDIA_TUNER_TDA18271 is not set
+# CONFIG_MEDIA_TUNER_TDA827X is not set
+# CONFIG_MEDIA_TUNER_TDA8290 is not set
+# CONFIG_MEDIA_TUNER_TDA9887 is not set
+# CONFIG_MEDIA_TUNER_TEA5761 is not set
+# CONFIG_MEDIA_TUNER_TEA5767 is not set
+# CONFIG_MEDIA_TUNER_XC2028 is not set
+# CONFIG_MEDIA_TUNER_XC4000 is not set
+# CONFIG_MEDIA_TUNER_XC5000 is not set
+
+
+# -----------------------------------------------
+# ENTERPRISE STORAGE — sin controladoras SAS/RAID de servidor
+# -----------------------------------------------
+# CONFIG_MEGARAID_NEWGEN is not set
+# CONFIG_MEGARAID_LEGACY is not set
+# CONFIG_MEGARAID_SAS is not set
+# CONFIG_FUSION is not set
+
+
+# -----------------------------------------------
+# PROTOCOLOS LEGACY / NICHO
+# -----------------------------------------------
+# CONFIG_HAMRADIO is not set
+# CONFIG_SOUND_OSS_CORE is not set
+# CONFIG_SND_OSSEMUL is not set
