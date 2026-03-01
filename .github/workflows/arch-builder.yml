@@ -31,13 +31,15 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
 
-    strategy:
-      matrix:
-        cpusched: [bore, pds]
-      fail-fast: false  # si uno falla, el otro sigue
-    
+    # strategy:
+    #   matrix:
+    #     cpusched: [bore, pds]
+    #   fail-fast: false  # si uno falla, el otro sigue
+    #
+
     env:
-      _cpusched: ${{ matrix.cpusched }}
+      _cpusched: pds
+      # _cpusched: ${{ matrix.cpusched }}
 
     steps:
       # ── Step 1 ──────────────────────────────────────────────────────────────
