@@ -15,7 +15,7 @@ env:
   _processor_opt: "silvermont"
   _compiler: "gcc"
   _lto_mode: "none"
-  _noccache: "false"          # ccache habilitado
+  _noccache: "true"           # ccache deshabilitado (incompatible con su + container)
   _git_mirror: "gregkh"
   PKGDEST: "/tmp/linux-tkg"
   _debugdisable: "true"
@@ -23,7 +23,6 @@ env:
   _kernel_work_folder: "/tmp"
   _kernel_source_folder: "/tmp"
   _nofallback: "true"
-  _localmodcfg: "true"        # compilar solo modulos del modprobed.db
   _modprobeddb_db_path: ${{ github.workspace }}/modprobed.db
 
 
@@ -48,7 +47,7 @@ jobs:
       - name: "3 · Install build dependencies and prepare non-root user"
         run: |
           pacman -Syu --noconfirm \
-            base-devel gcc binutils libelf elfutils pahole sudo ccache
+            base-devel gcc binutils libelf elfutils pahole sudo
 
           useradd user -G wheel
           echo "user ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
@@ -57,34 +56,16 @@ jobs:
           chown user -R /tmp
 
       # ── Step 4 ──────────────────────────────────────────────────────────────
-      # Cache key usa ref en lugar de sha para reutilizar entre commits
-      # ────────────────────────────────────────────────────────────────────────
-      - name: "4 · Restore ccache"
-        uses: actions/cache@v4
-        with:
-          path: /home/user/.ccache
-          key: ccache-arch-${{ env._cpusched }}-${{ github.ref }}
-          restore-keys: |
-            ccache-arch-${{ env._cpusched }}-
-            ccache-arch-
-
-      # ── Step 5 ──────────────────────────────────────────────────────────────
-      - name: "5 · Fix ccache ownership"
-        run: |
-          mkdir -p /home/user/.ccache
-          chown -R user /home/user/.ccache
-
-      # ── Step 6 ──────────────────────────────────────────────────────────────
-      - name: "6 · Compile kernel"
+      - name: "4 · Compile kernel"
         run: |
           su --preserve-environment user -c "yes '' | makepkg --noconfirm -s"
 
-      # ── Step 7 ──────────────────────────────────────────────────────────────
-      - name: "7 · Rename kernel config"
+      # ── Step 5 ──────────────────────────────────────────────────────────────
+      - name: "5 · Rename kernel config"
         run: mv kernelconfig.new kernelconfig.arch.${{ env._cpusched }}.txt
 
-      # ── Step 8 ──────────────────────────────────────────────────────────────
-      - name: "8 · Get kernel version and scheduler"
+      # ── Step 6 ──────────────────────────────────────────────────────────────
+      - name: "6 · Get kernel version and scheduler"
         id: kver
         run: |
           PKG=$(find ${{ env.PKGDEST }} -name "linux*.pkg.tar.zst" \
@@ -98,8 +79,8 @@ jobs:
           echo "sched=$SCHED" >> $GITHUB_OUTPUT
           echo "Kernel: $VERSION | Scheduler: $SCHED"
 
-      # ── Step 9 ──────────────────────────────────────────────────────────────
-      - name: "9 · Upload artifacts"
+      # ── Step 7 ──────────────────────────────────────────────────────────────
+      - name: "7 · Upload artifacts"
         uses: actions/upload-artifact@v4
         with:
           name: arch-kernel-packages-${{ steps.kver.outputs.sched }}
@@ -107,8 +88,8 @@ jobs:
             ${{ env.PKGDEST }}/linux*.pkg.tar.zst
             kernelconfig*.txt
 
-      # ── Step 10 ─────────────────────────────────────────────────────────────
-      - name: "10 · Create GitHub Release"
+      # ── Step 8 ─────────────────────────────────────────────────────────────
+      - name: "8 · Create GitHub Release"
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
@@ -132,7 +113,6 @@ jobs:
             | LTO mode | none |
             | Debug symbols | disabled |
             | modprobed-db | enabled |
-            | localmodcfg | enabled |
 
           files: |
             ${{ env.PKGDEST }}/linux*.pkg.tar.zst
